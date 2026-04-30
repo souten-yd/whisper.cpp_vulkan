@@ -22,33 +22,61 @@ jobs:
       DIST_DIR: dist
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - name: Install Vulkan SDK
         uses: jakoch/install-vulkan-sdk-action@v1
         with:
           vulkan_version: 1.4.309.0
           install_runtime: true
           cache: true
-      - name: Configure
-        shell: pwsh
-        run: cmake -S third_party/whisper.cpp -B $env:BUILD_DIR -G "Visual Studio 17 2022" -A x64 -DGGML_VULKAN=1 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
-      - name: Build
-        shell: pwsh
-        run: cmake --build $env:BUILD_DIR --config Release --parallel
-      - name: Record commit
+      - name: Fetch latest whisper.cpp
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+
+          New-Item -ItemType Directory -Force -Path third_party | Out-Null
+
+          $whisperDir = "third_party/whisper.cpp"
+
+          if (-not (Test-Path $whisperDir)) {
+            Write-Host "Cloning latest whisper.cpp..."
+            git clone --depth 1 https://github.com/ggml-org/whisper.cpp $whisperDir
+          } else {
+            Write-Host "Updating existing whisper.cpp..."
+            git -C $whisperDir fetch origin
+            git -C $whisperDir checkout main
+            git -C $whisperDir pull --ff-only origin main
+          }
+
+          if (-not (Test-Path "$whisperDir/CMakeLists.txt")) {
+            Get-ChildItem -Recurse third_party | ForEach-Object { Write-Host $_.FullName }
+            throw "third_party/whisper.cpp/CMakeLists.txt was not found."
+          }
+
           $repo = "https://github.com/ggml-org/whisper.cpp"
-          $branch = git -C third_party/whisper.cpp rev-parse --abbrev-ref HEAD
-          $commit = git -C third_party/whisper.cpp rev-parse HEAD
+          $branch = git -C $whisperDir rev-parse --abbrev-ref HEAD
+          $commit = git -C $whisperDir rev-parse HEAD
           $updated = (Get-Date).ToUniversalTime().ToString("o")
+
           @"
           whisper.cpp repository: $repo
           branch: $branch
           commit: $commit
           updated_at: $updated
           "@ | Set-Content -Encoding UTF8 WHISPER_CPP_COMMIT.txt
+
+          Get-Content WHISPER_CPP_COMMIT.txt
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S third_party/whisper.cpp -B $env:BUILD_DIR `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DGGML_VULKAN=1 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=OFF
+      - name: Build
+        shell: pwsh
+        run: cmake --build $env:BUILD_DIR --config Release --parallel
       - name: Locate
         id: locate
         shell: pwsh
