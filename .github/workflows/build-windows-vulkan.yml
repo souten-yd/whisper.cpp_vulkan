@@ -83,12 +83,62 @@ jobs:
           release_name: $releaseName
           "@ | Set-Content -Encoding UTF8 WHISPER_CPP_COMMIT.txt
 
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.4.309.0
+          install_runtime: true
+          cache: true
+
+      - name: Verify Vulkan SDK
+        run: |
+          Write-Host "VULKAN_SDK=$env:VULKAN_SDK"
+
+          if (-not $env:VULKAN_SDK) {
+            throw "VULKAN_SDK is not set. Vulkan SDK installation failed. Check the Install Vulkan SDK step output."
+          }
+
+          $includeDir = Join-Path $env:VULKAN_SDK "Include"
+          $libDir = Join-Path $env:VULKAN_SDK "Lib"
+          $vulkanLib = Join-Path $libDir "vulkan-1.lib"
+          $glslc = Join-Path $env:VULKAN_SDK "Bin\glslc.exe"
+
+          if (-not (Test-Path $includeDir)) {
+            throw "Vulkan include directory was not found: $includeDir. Confirm the SDK version and installer logs."
+          }
+
+          if (-not (Test-Path $libDir)) {
+            throw "Vulkan lib directory was not found: $libDir. Confirm the SDK version and installer logs."
+          }
+
+          if (-not (Test-Path $vulkanLib)) {
+            throw "Vulkan library was not found: $vulkanLib. Confirm the SDK installation completed successfully."
+          }
+
+          if (-not (Test-Path $glslc)) {
+            throw "glslc.exe was not found: $glslc. Confirm shader tools are included in the installed SDK."
+          }
+
+          Write-Host "Vulkan include: $includeDir"
+          Write-Host "Vulkan lib: $libDir"
+          Write-Host "Vulkan library: $vulkanLib"
+          Write-Host "glslc: $glslc"
+
+          Get-ChildItem $env:VULKAN_SDK
+
       - name: Configure whisper.cpp with Vulkan
         run: |
+          $vulkanInclude = Join-Path $env:VULKAN_SDK "Include"
+          $vulkanLib = Join-Path $env:VULKAN_SDK "Lib\vulkan-1.lib"
+          $glslc = Join-Path $env:VULKAN_SDK "Bin\glslc.exe"
+
           cmake -S third_party/whisper.cpp -B build `
             -G "Visual Studio 17 2022" `
             -A x64 `
             -DGGML_VULKAN=1 `
+            -DVulkan_INCLUDE_DIR="$vulkanInclude" `
+            -DVulkan_LIBRARY="$vulkanLib" `
+            -DVulkan_GLSLC_EXECUTABLE="$glslc" `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_SHARED_LIBS=OFF
 
