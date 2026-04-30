@@ -1,0 +1,4 @@
+whisper.cpp repository: https://github.com/ggml-org/whisper.cpp
+branch: unknown
+commit: unknown
+updated_at: unknown
